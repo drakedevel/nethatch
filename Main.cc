@@ -147,11 +147,52 @@ int main(int argc, char **argv)
     return 0;
 }
 
+static void InjectTCP(libnet_t *libnet,
+                      libnet_ipv4_hdr *ipv4,
+                      libnet_tcp_hdr *tcp,
+                      bool backward,
+                      uint8_t flags)
+{
+    libnet_build_tcp(backward ? ntohs(tcp->th_dport) : ntohs(tcp->th_sport),
+                     backward ? ntohs(tcp->th_sport) : ntohs(tcp->th_dport),
+                     backward ? ntohl(tcp->th_ack) : ntohl(tcp->th_seq),
+                     backward ? ntohl(tcp->th_seq) : ntohl(tcp->th_ack),
+                     flags,
+                     ntohs(tcp->th_win),
+                     0, // Auto-fill checksum
+                     0,
+                     LIBNET_TCP_H,
+                     0, // payload
+                     0, // payload size
+                     libnet,
+                     0);
+    libnet_build_ipv4(LIBNET_IPV4_H + LIBNET_TCP_H,
+                      ipv4->ip_tos,
+                      ntohs(ipv4->ip_id),
+                      0,
+                      ipv4->ip_ttl,
+                      ipv4->ip_p,
+                      0, // Auto-fill checksum
+                      backward ? ipv4->ip_dst.s_addr : ipv4->ip_src.s_addr,
+                      backward ? ipv4->ip_src.s_addr : ipv4->ip_dst.s_addr,
+                      0, // payload
+                      0, // payload size
+                      libnet,
+                      0);
+    int error = libnet_write(libnet);
+    if (error < 0)
+    {
+        ERROR("Error injecting packet: %d, %s", error, libnet_errbuf);
+    }
+    libnet_clear_packet(libnet);
+
+}
 static void InjectRSTs(libnet_t *libnet,
                        libnet_ipv4_hdr *ipv4,
                        libnet_tcp_hdr *tcp)
 {
-    
+    InjectTCP(libnet, ipv4, tcp, false, TH_RST);
+    InjectTCP(libnet, ipv4, tcp, true, TH_RST);
 }
 
 #ifndef DUMB_AS_NAILS
@@ -159,7 +200,8 @@ static void InjectFINs(libnet_t *libnet,
                        libnet_ipv4_hdr *ipv4,
                        libnet_tcp_hdr *tcp)
 {
-    
+    InjectTCP(libnet, ipv4, tcp, false, TH_FIN | TH_ACK);
+    InjectTCP(libnet, ipv4, tcp, true, TH_FIN | TH_ACK);
 }
 #endif
 
