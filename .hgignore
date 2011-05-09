@@ -1,6 +1,0 @@
-syntax: glob
-*.o
-
-syntax: regexp
-^nethatch$
-^\.sconsign\.dblite$
